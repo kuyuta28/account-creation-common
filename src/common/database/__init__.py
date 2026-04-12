@@ -29,8 +29,10 @@ from ._engine import (
 )
 from ._mailboxes import (
     block_mailbox_for_service,
+    get_mailbox_record,
     is_mailbox_blocked_for_service,
     unblock_mailbox_for_service,
+    upsert_mailbox_record,
 )
 from ._migrations import init_db
 from ._providers import (
@@ -42,4 +44,4 @@ from ._providers import (
     update_provider,
     upsert_mail_provider,
 )
-from ._services import add_service, delete_service, get_distinct_services
+from ._services import add_service, delete_service, get_distinct_services, service_exists
