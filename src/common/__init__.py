@@ -1,0 +1,1 @@
+"""account-creation-common — Shared core utilities for all services."""

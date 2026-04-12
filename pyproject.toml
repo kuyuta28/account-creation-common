@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=70"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "account-creation-common"
+version = "0.1.0"
+description = "Shared core utilities for account-creation services."
+requires-python = ">=3.10"
+dependencies = [
+    "sqlalchemy>=2.0",
+    "PyYAML>=6.0",
+    "playwright>=1.50.0",
+    "pyotp>=2.9.0",
+    "sentry-sdk[fastapi]>=2.0.0",
+    "httpx>=0.25.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
