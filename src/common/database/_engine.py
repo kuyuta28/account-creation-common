@@ -214,10 +214,18 @@ class _MailboxServiceBlock(_Base):
 
 _engines: dict[str, Engine] = {}
 
+_DEFAULT_PRAGMAS: dict[str, str] = {
+    "journal_mode": "WAL",
+    "busy_timeout": "5000",
+    "synchronous": "NORMAL",
+    "foreign_keys": "ON",
+}
 
-def _get_engine(db_path: Path) -> Engine:
+
+def _get_engine(db_path: Path, pragmas: dict[str, str] | None = None) -> Engine:
     key = str(db_path.resolve())
     if key not in _engines:
+        _pragmas = {**_DEFAULT_PRAGMAS, **(pragmas or {})}
         engine = create_engine(
             f"sqlite:///{key}",
             connect_args={"check_same_thread": False},
@@ -226,10 +234,8 @@ def _get_engine(db_path: Path) -> Engine:
 
         @event.listens_for(engine, "connect")
         def _set_pragmas(dbapi_conn, _record):
-            dbapi_conn.execute("PRAGMA journal_mode=WAL")
-            dbapi_conn.execute("PRAGMA busy_timeout=5000")
-            dbapi_conn.execute("PRAGMA synchronous=NORMAL")
-            dbapi_conn.execute("PRAGMA foreign_keys=ON")
+            for _name, _value in _pragmas.items():
+                dbapi_conn.execute(f"PRAGMA {_name}={_value}")
 
         _engines[key] = engine
     return _engines[key]

@@ -451,19 +451,21 @@ def _migrate_to_cti(engine) -> None:
         raw.close()
 
 
-def init_db(db_path: Path, supported_services: set[str] | None = None) -> None:
+def init_db(db_path: Path, supported_services: set[str] | None = None, pragmas: dict[str, str] | None = None) -> None:
     """Tạo bảng + index nếu chưa có (idempotent). Chạy migrations theo thứ tự.
 
     Args:
         db_path: Đường dẫn SQLite DB.
         supported_services: Set các service name (ví dụ: {"klingai", "chatgpt"}).
             Nếu None, sẽ không seed services catalog.
+        pragmas: Dict SQLite PRAGMA overrides (ví dụ: {"busy_timeout": "10000"}).
+            Keys merge với defaults (journal_mode=WAL, busy_timeout=5000, synchronous=NORMAL, foreign_keys=ON).
     """
     if supported_services is not None:
         set_supported_services(supported_services)
 
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    engine = _get_engine(db_path)
+    engine = _get_engine(db_path, pragmas=pragmas)
     _Base.metadata.create_all(engine)
     _migrate_columns(engine)
     _migrate_provider_domain(engine)
