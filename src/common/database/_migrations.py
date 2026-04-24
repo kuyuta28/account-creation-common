@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from ._engine import (
     _Account, _Base, _MailProvider, _Service,
     _get_engine, _now,
-    _AccountGmail, _AccountAA, _AccountOpenRouter, _AccountTwoSlides,
+    _AccountGmail, _AccountAA, _AccountOpenRouter,
     _AccountElevenLabs, _AccountTestmail, _AccountMailosaur,
 )
 from ._services import _SUPPORTED_SERVICES
@@ -334,11 +334,6 @@ def _migrate_to_cti(engine) -> None:
                 expired       TEXT NOT NULL DEFAULT '',
                 last_refresh  TEXT NOT NULL DEFAULT ''
             );
-            CREATE TABLE IF NOT EXISTS accounts_twoslides (
-                account_id INTEGER PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
-                api_key    TEXT NOT NULL DEFAULT '',
-                credits    INTEGER NOT NULL DEFAULT 0
-            );
             CREATE TABLE IF NOT EXISTS accounts_elevenlabs (
                 account_id INTEGER PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
                 api_key    TEXT NOT NULL DEFAULT ''
@@ -382,11 +377,6 @@ def _migrate_to_cti(engine) -> None:
                     COALESCE(refresh_token, ''), COALESCE(access_token, ''), COALESCE(id_token, ''),
                     COALESCE(token_type, ''), COALESCE(expired, ''), COALESCE(last_refresh, '')
                 FROM accounts WHERE service = 'OPENROUTER'
-            """)
-            cur.execute("""
-                INSERT OR IGNORE INTO accounts_twoslides (account_id, api_key, credits)
-                SELECT id, COALESCE(api_key, ''), COALESCE(credits, 0)
-                FROM accounts WHERE service = '2SLIDES'
             """)
             cur.execute("""
                 INSERT OR IGNORE INTO accounts_elevenlabs (account_id, api_key)

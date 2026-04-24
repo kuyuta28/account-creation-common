@@ -5,6 +5,7 @@ Internal module — callers use database/__init__.py public API.
 """
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
@@ -77,13 +78,6 @@ class _AccountOpenRouter(_Base):
     last_refresh:  Mapped[str] = mapped_column(String(64), default="")
 
 
-class _AccountTwoSlides(_Base):
-    __tablename__ = "accounts_twoslides"
-    account_id: Mapped[int] = mapped_column(Integer, ForeignKey("accounts.id", ondelete="CASCADE"), primary_key=True)
-    api_key:    Mapped[str] = mapped_column(Text, default="")
-    credits:    Mapped[int] = mapped_column(Integer, default=0)
-
-
 class _AccountElevenLabs(_Base):
     __tablename__ = "accounts_elevenlabs"
     account_id: Mapped[int] = mapped_column(Integer, ForeignKey("accounts.id", ondelete="CASCADE"), primary_key=True)
@@ -115,7 +109,6 @@ _EXTENSION_MODELS: dict[str, type] = {
     "GMAIL":              _AccountGmail,
     "ARTIFICIALANALYSIS": _AccountAA,
     "OPENROUTER":         _AccountOpenRouter,
-    "2SLIDES":            _AccountTwoSlides,
     "ELEVENLABS":         _AccountElevenLabs,
     "OLLAMA":             _AccountOllama,
     "TESTMAIL":           _AccountTestmail,
@@ -134,7 +127,6 @@ _EXT_UPDATABLE: dict[str, frozenset[str]] = {
     "ARTIFICIALANALYSIS": frozenset({"api_key", "org_slug", "account_id"}),
     "OPENROUTER":         frozenset({"api_key", "credits", "quota_pct", "refresh_token",
                                      "access_token", "id_token", "token_type", "expired", "last_refresh"}),
-    "2SLIDES":            frozenset({"api_key", "credits"}),
     "ELEVENLABS":         frozenset({"api_key"}),
     "OLLAMA":             frozenset({"api_key"}),
     "TESTMAIL":           frozenset({"api_key"}),
@@ -208,6 +200,46 @@ class _MailboxServiceBlock(_Base):
     __table_args__ = (
         Index("idx_msb_service", "service"),
     )
+
+
+# ── Async Engine (Phase 2) ───────────────────────────────────────────────────
+
+_async_engine = None
+_async_session_factory = None
+
+
+def init_async_db(database_url: str) -> None:
+    """Initialize async engine and session factory. Call once at startup."""
+    global _async_engine, _async_session_factory
+    from sqlalchemy.ext.asyncio import async_engine_from_config, async_sessionmaker, create_async_engine
+    from sqlalchemy import pool
+
+    _async_engine = create_async_engine(
+        database_url,
+        echo=False,
+        poolclass=pool.NullPool,
+    )
+    _async_session_factory = async_sessionmaker(
+        _async_engine,
+        expire_on_commit=False,
+    )
+
+
+@asynccontextmanager
+async def get_async_session():
+    """Async context manager for database sessions."""
+    global _async_session_factory
+    factory = _async_session_factory
+    if factory is None:
+        raise RuntimeError("init_async_db() must be called before get_async_session()")
+    async with factory() as session:
+        yield session
+
+
+def get_async_engine():
+    """Return the async engine instance."""
+    global _async_engine
+    return _async_engine
 
 
 # ── Engine cache ──────────────────────────────────────────────────────────────
@@ -316,9 +348,6 @@ def _to_dict(row: _Account, ext=None) -> dict[str, Any]:
         d["token_type"]    = ext.token_type
         d["expired"]       = ext.expired
         d["last_refresh"]  = ext.last_refresh
-    elif svc == "2SLIDES":
-        d["api_key"] = ext.api_key
-        d["credits"] = ext.credits
     elif svc in ("ELEVENLABS", "OLLAMA", "TESTMAIL"):
         d["api_key"] = ext.api_key
     elif svc == "MAILOSAUR":
@@ -429,11 +458,6 @@ def _ext_values(record) -> dict | None:
                 "token_type":    getattr(record, "token_type", ""),
                 "expired":       getattr(record, "expired", ""),
                 "last_refresh":  getattr(record, "last_refresh", ""),
-            }
-        case "2SLIDES":
-            return {
-                "api_key": getattr(record, "api_key", ""),
-                "credits": getattr(record, "credits", 0),
             }
         case "ELEVENLABS":
             return {"api_key": getattr(record, "api_key", "")}

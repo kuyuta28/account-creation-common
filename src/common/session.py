@@ -1,62 +1,58 @@
 """
-session.py — Generic Playwright session persistence cho mọi service.
+session.py — Generic Playwright session persistence via Registrar Internal API.
 
 Lưu/load Playwright storage_state (cookies + localStorage + sessionStorage)
-vào cột session_state trong bảng accounts của SQLite DB.
+vào cột session_state trong bảng accounts trên PostgreSQL qua Registrar API.
 
 Public API:
-  save_session(db_path, service, email, context) -> None
-  load_session(db_path, service, email) -> dict | None
-  has_session(db_path, service, email) -> bool
+  save_session(service, email, context) -> None
+  load_session(service, email) -> dict | None
+  has_session(service, email) -> bool
 """
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
-from .database import get_account_by_email, update_account
+from .internal_client import InternalClient
 
 
-async def save_session(db_path: Path, service: str, email: str, context) -> None:
-    """Lưu Playwright storage_state của context vào DB.
+async def save_session(service: str, email: str, context) -> None:
+    """Lưu Playwright storage_state của context vào Registrar DB qua API.
 
     Args:
-        db_path:  Đường dẫn SQLite DB.
         service:  Service tag (ví dụ: "KLINGAI", "ARTIFICIALANALYSIS").
         email:    Email định danh account.
         context:  Playwright BrowserContext đang active.
     """
     state = await context.storage_state()
-    update_account(
-        db_path,
-        service.upper(),
-        email,
-        session_state=json.dumps(state, ensure_ascii=False),
-    )
+    async with InternalClient() as client:
+        await client.save_session(service.upper(), email, json.dumps(state, ensure_ascii=False))
 
 
-def load_session(db_path: Path, service: str, email: str) -> dict | None:
-    """Load storage_state từ DB.
+async def load_session(service: str, email: str) -> dict | None:
+    """Load storage_state từ Registrar DB.
 
     Returns:
         dict phù hợp cho `browser.new_context(storage_state=...)`.
         None nếu chưa có session được lưu.
 
     Raises:
-        RuntimeError: nếu account không tồn tại trong DB.
+        RuntimeError: nếu account không tồn tại.
     """
-    row = get_account_by_email(db_path, service.upper(), email)
-    if not row:
-        raise RuntimeError(f"Account không tồn tại trong DB: {service}/{email}")
-    raw = row.get("session_state", "")
-    if not raw:
-        return None
-    return json.loads(raw)
+    async with InternalClient() as client:
+        acc = await client.get_account(service.upper(), email)
+        if not acc:
+            raise RuntimeError(f"Account không tồn tại trong DB: {service}/{email}")
+        raw = acc.get("session_state", "")
+        if not raw:
+            return None
+        return json.loads(raw)
 
 
-def has_session(db_path: Path, service: str, email: str) -> bool:
+async def has_session(service: str, email: str) -> bool:
     """Kiểm tra account có session được lưu chưa."""
-    row = get_account_by_email(db_path, service.upper(), email)
-    if not row:
-        return False
-    return bool(row.get("session_state", ""))
+    async with InternalClient() as client:
+        acc = await client.get_account(service.upper(), email)
+        if not acc:
+            return False
+        return bool(acc.get("session_state", ""))
