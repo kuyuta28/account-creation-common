@@ -524,23 +524,57 @@ async def service_exists_async(session: AsyncSession, name: str) -> bool:
     return result.scalar_one_or_none() is not None
 
 
-async def get_accounts_async(session: AsyncSession, service: str | None = None) -> list[dict[str, Any]]:
-    """Async version of get_accounts - returns list of account dicts."""
+async def get_accounts_async(
+    session: AsyncSession,
+    service: str | None = None,
+    limit: int | None = None,
+    offset: int | None = None,
+    exclude_service: str | None = None,
+) -> list[dict[str, Any]]:
+    """Async version of get_accounts - returns list of account dicts.
+
+    Args:
+        session: AsyncSession
+        service: filter by service name, or None for all
+        limit: max rows to return (None = no limit)
+        offset: rows to skip (None = 0)
+        exclude_service: exclude rows with this service name (e.g. "GMAIL")
+    """
     from common.database._engine import _Account
-    from sqlalchemy import select
-    stmt = select(_Account)
+    from sqlalchemy import select, and_
+    conditions = []
     if service:
-        stmt = stmt.where(_Account.service == service.upper())
+        conditions.append(_Account.service == service.upper())
+    if exclude_service:
+        conditions.append(_Account.service != exclude_service.upper())
+    stmt = select(_Account)
+    if conditions:
+        stmt = stmt.where(and_(*conditions))
+    stmt = stmt.order_by(_Account.id)
+    if limit is not None:
+        stmt = stmt.limit(limit)
+    if offset is not None:
+        stmt = stmt.offset(offset)
     result = await session.execute(stmt)
     rows = result.scalars().all()
     return [_to_dict(r) for r in rows]
 
 
-async def count_accounts_async(session: AsyncSession, service: str) -> int:
-    """Count accounts for a service."""
+async def count_accounts_async(
+    session: AsyncSession,
+    service: str | None = None,
+    exclude_service: str | None = None,
+) -> int:
+    """Count total accounts, optionally filtered by service and/or exclude_service."""
     from common.database._engine import _Account
-    from sqlalchemy import func, select
-    result = await session.execute(
-        select(func.count()).where(_Account.service == service.upper())
-    )
+    from sqlalchemy import func, select, and_
+    conditions = []
+    if service:
+        conditions.append(_Account.service == service.upper())
+    if exclude_service:
+        conditions.append(_Account.service != exclude_service.upper())
+    stmt = select(func.count(_Account.id))
+    if conditions:
+        stmt = stmt.where(and_(*conditions))
+    result = await session.execute(stmt)
     return result.scalar() or 0
