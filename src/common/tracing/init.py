@@ -4,7 +4,7 @@ init.py — OpenTelemetry tracing initialization.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Iterator
 
 if TYPE_CHECKING:
     from opentelemetry.sdk.trace import TracerProvider
@@ -19,7 +19,7 @@ def init_tracing(service_name: str, enabled: bool = True) -> None:
     global _tracer
 
     if not enabled:
-        _log.info("Tracing disabled")
+        _log.info("Tracing disabled for %s", service_name)
         return
 
     try:
@@ -48,11 +48,16 @@ def init_tracing(service_name: str, enabled: bool = True) -> None:
 
 def get_tracer(name: str = "common"):
     """Get a tracer instance."""
-    try:
-        from opentelemetry import trace
-        return trace.get_tracer(name)
-    except ImportError:
-        return _NoOpTracer()
+    global _tracer
+
+    if _tracer is not None:
+        try:
+            from opentelemetry import trace
+            return trace.get_tracer(name)
+        except ImportError:
+            pass
+
+    return _NoOpTracer(name)
 
 
 def add_span_attributes(**attrs) -> None:
@@ -67,18 +72,47 @@ def add_span_attributes(**attrs) -> None:
         pass
 
 
-class _NoOpTracer:
-    """No-op tracer when OTel not available."""
-    def start_as_current_span(self, name, **kwargs):
-        yield _NoOpSpan()
-
-
 class _NoOpSpan:
     """No-op span when OTel not available."""
     def set_attribute(self, key, value): pass
     def set_status(self, status): pass
     def record_exception(self, exc): pass
     def end(self): pass
+
+
+class _NoOpScope:
+    """No-op scope that implements context manager protocol."""
+    __slots__ = ('_span',)
+
+    def __init__(self, span: _NoOpSpan):
+        self._span = span
+
+    def __enter__(self) -> _NoOpSpan:
+        return self._span
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+        return False
+
+
+class _NoOpTracer:
+    """No-op tracer when OTel not available.
+
+    Returns _NoOpScope context manager compatible with OTel API.
+    """
+    __slots__ = ('_name',)
+
+    def __init__(self, name: str = "no-op"):
+        self._name = name
+
+    def start_as_current_span(
+        self,
+        name: str,
+        context=None,
+        links=None,
+        start_options=None,
+        end_on_exit=True,
+    ):
+        return _NoOpScope(_NoOpSpan())
 
 
 # ── Tracing context helpers ────────────────────────────────────────────────────
