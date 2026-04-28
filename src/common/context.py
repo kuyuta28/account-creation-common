@@ -9,7 +9,6 @@ Design principles:
 """
 from __future__ import annotations
 
-import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
@@ -65,7 +64,7 @@ def get_app_context() -> AppContext:
 # ── Lifecycle ──────────────────────────────────────────────────────
 
 @asynccontextmanager
-async def lifespan_context(app: Any) -> AsyncIterator[AppContext]:
+async def lifespan_context(_app: Any) -> AsyncIterator[AppContext]:
     """FastAPI lifespan — init → yield → shutdown."""
     ctx = get_app_context()
 
