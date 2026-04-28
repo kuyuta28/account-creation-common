@@ -1,0 +1,88 @@
+"""
+context.py — Enterprise-grade application context container.
+
+Design principles:
+1. Immutable config (frozen dataclass)
+2. Structured state managers (not scattered dicts)
+3. Lifecycle-aware (init → use → shutdown)
+4. Testable (mockable managers)
+"""
+from __future__ import annotations
+
+import asyncio
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Callable
+from collections.abc import AsyncIterator
+
+if TYPE_CHECKING:
+    from mail_service.src.mail.circuit_breaker import CircuitBreakerState
+    from mail_service.src.mail_service.services.mailbox_store import MailboxStore
+    from registrar.src.api.services.job_manager import JobManager
+
+
+@dataclass(frozen=True)
+class AppContext:
+    """Immutable container — single source of truth for all dependencies."""
+    config: Any
+    db_engine: Any
+    mail_state: CircuitBreakerState | None = None
+    mailbox_store: MailboxStore | None = None
+    job_state: JobManager | None = None
+    shutdown_handlers: tuple[Callable[[], Any], ...] = field(default_factory=tuple)
+
+
+# ── Global singleton ────────────────────────────────────────────────
+
+_container: AppContext | None = None
+
+
+def init_app_context(
+    config: Any,
+    db_engine: Any,
+    mail_state: CircuitBreakerState | None = None,
+    mailbox_store: MailboxStore | None = None,
+    job_state: JobManager | None = None,
+) -> AppContext:
+    global _container
+    _container = AppContext(
+        config=config,
+        db_engine=db_engine,
+        mail_state=mail_state,
+        mailbox_store=mailbox_store,
+        job_state=job_state,
+        shutdown_handlers=(),
+    )
+    return _container
+
+
+def get_app_context() -> AppContext:
+    if _container is None:
+        raise RuntimeError("AppContext not initialized — call init_app_context() first")
+    return _container
+
+
+# ── Lifecycle ──────────────────────────────────────────────────────
+
+@asynccontextmanager
+async def lifespan_context(app: Any) -> AsyncIterator[AppContext]:
+    """FastAPI lifespan — init → yield → shutdown."""
+    ctx = get_app_context()
+
+    # Startup: init all state managers
+    if ctx.mail_state:
+        await ctx.mail_state.init()
+    if ctx.mailbox_store:
+        await ctx.mailbox_store.init()
+    if ctx.job_state:
+        await ctx.job_state.init()
+
+    yield ctx
+
+    # Graceful shutdown in reverse order
+    if ctx.job_state:
+        await ctx.job_state.shutdown()
+    if ctx.mailbox_store:
+        await ctx.mailbox_store.shutdown()
+    if ctx.mail_state:
+        await ctx.mail_state.shutdown()

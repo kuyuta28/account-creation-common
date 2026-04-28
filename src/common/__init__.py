@@ -39,6 +39,13 @@ from .clients import (
     get_internal_key,
 )
 
+from .context import (
+    AppContext,
+    init_app_context,
+    get_app_context,
+    lifespan_context,
+)
+
 __all__ = [
     # Logging
     "get_request_id",
@@ -70,4 +77,9 @@ __all__ = [
     "InternalClient",
     "set_internal_key",
     "get_internal_key",
+    # Context
+    "AppContext",
+    "init_app_context",
+    "get_app_context",
+    "lifespan_context",
 ]
