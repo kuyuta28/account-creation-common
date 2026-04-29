@@ -11,7 +11,7 @@ from typing import Any
 import httpx
 
 
-_REGISTRAR_URL = os.getenv("REGISTRAR_URL", "http://localhost:8709")
+_REGISTRAR_URL = os.getenv("REGISTRAR_URL", "http://registrar:8709")
 _INTERNAL_KEY = os.getenv("INTERNAL_API_KEY", "ccs-internal")
 _TIMEOUT = 30.0
 

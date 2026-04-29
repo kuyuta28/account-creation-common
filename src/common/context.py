@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from mail_service.src.mail.circuit_breaker import CircuitBreakerState
     from mail_service.src.mail_service.services.mailbox_store import MailboxStore
     from registrar.src.api.services.job_manager import JobManager
+    from registrar.src.api.services.image_lab_job_manager import ImageLabJobManager
 
 
 @dataclass(frozen=True)
@@ -28,6 +29,7 @@ class AppContext:
     mail_state: CircuitBreakerState | None = None
     mailbox_store: MailboxStore | None = None
     job_state: JobManager | None = None
+    image_lab_manager: ImageLabJobManager | None = None
     shutdown_handlers: tuple[Callable[[], Any], ...] = field(default_factory=tuple)
 
 
@@ -42,6 +44,7 @@ def init_app_context(
     mail_state: CircuitBreakerState | None = None,
     mailbox_store: MailboxStore | None = None,
     job_state: JobManager | None = None,
+    image_lab_manager: ImageLabJobManager | None = None,
 ) -> AppContext:
     global _container
     _container = AppContext(
@@ -50,6 +53,7 @@ def init_app_context(
         mail_state=mail_state,
         mailbox_store=mailbox_store,
         job_state=job_state,
+        image_lab_manager=image_lab_manager,
         shutdown_handlers=(),
     )
     return _container
@@ -75,10 +79,14 @@ async def lifespan_context(_app: Any) -> AsyncIterator[AppContext]:
         await ctx.mailbox_store.init()
     if ctx.job_state:
         await ctx.job_state.init()
+    if ctx.image_lab_manager:
+        await ctx.image_lab_manager.init()
 
     yield ctx
 
     # Graceful shutdown in reverse order
+    if ctx.image_lab_manager:
+        await ctx.image_lab_manager.shutdown()
     if ctx.job_state:
         await ctx.job_state.shutdown()
     if ctx.mailbox_store:
