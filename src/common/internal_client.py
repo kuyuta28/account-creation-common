@@ -66,7 +66,10 @@ class InternalClient:
             params = {"service": service} if service else {}
             resp = await self._client.get("/api/v1/internal/accounts", params=params)
             resp.raise_for_status()
-            return resp.json()["data"] or []
+            data = resp.json()["data"] or []
+            if isinstance(data, dict):
+                return data.get("accounts", [])
+            return data
         except httpx.HTTPError as e:
             raise RuntimeError(f"Failed to list accounts: {e}") from e
 
