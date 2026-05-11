@@ -11,14 +11,14 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable
+from typing import Any, Callable, Protocol
 from collections.abc import AsyncIterator
 
-if TYPE_CHECKING:
-    from mail_service.src.mail.circuit_breaker import CircuitBreakerState
-    from mail_service.src.mail_service.services.mailbox_store import MailboxStore
-    from registrar.src.api.services.job_manager import JobManager
-    from registrar.src.api.services.image_lab_job_manager import ImageLabJobManager
+
+class LifecycleManager(Protocol):
+    async def init(self) -> None: ...
+
+    async def shutdown(self) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -26,10 +26,10 @@ class AppContext:
     """Immutable container — single source of truth for all dependencies."""
     config: Any
     db_engine: Any
-    mail_state: CircuitBreakerState | None = None
-    mailbox_store: MailboxStore | None = None
-    job_state: JobManager | None = None
-    image_lab_manager: ImageLabJobManager | None = None
+    mail_state: LifecycleManager | None = None
+    mailbox_store: LifecycleManager | None = None
+    job_state: LifecycleManager | None = None
+    image_lab_manager: LifecycleManager | None = None
     shutdown_handlers: tuple[Callable[[], Any], ...] = field(default_factory=tuple)
 
 
@@ -41,10 +41,10 @@ _container: AppContext | None = None
 def init_app_context(
     config: Any,
     db_engine: Any,
-    mail_state: CircuitBreakerState | None = None,
-    mailbox_store: MailboxStore | None = None,
-    job_state: JobManager | None = None,
-    image_lab_manager: ImageLabJobManager | None = None,
+    mail_state: LifecycleManager | None = None,
+    mailbox_store: LifecycleManager | None = None,
+    job_state: LifecycleManager | None = None,
+    image_lab_manager: LifecycleManager | None = None,
 ) -> AppContext:
     global _container
     _container = AppContext(
