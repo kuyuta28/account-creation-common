@@ -514,7 +514,7 @@ async def list_services_async(session: AsyncSession) -> list[str]:
     from common.database._engine import _Service
     from sqlalchemy import select
     result = await session.execute(select(_Service.name).order_by(_Service.name))
-    return [r[0] for r in result.fetchall() if r[0] != "GMAIL"]
+    return [r[0] for r in result.fetchall()]
 
 
 async def service_exists_async(session: AsyncSession, name: str) -> bool:

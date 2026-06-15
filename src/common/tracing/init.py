@@ -41,7 +41,10 @@ def init_tracing(service_name: str, enabled: bool = True) -> None:
         _log.info("Tracing initialized for %s", service_name)
 
     except ImportError as e:
-        _log.warning("OpenTelemetry not installed: %s", e)
+        # Demoted to debug: the OT SDK is an optional runtime dep, and
+        # the dev stack intentionally doesn't ship it. Emitting this as
+        # WARNING on every container boot drowned the actual logs.
+        _log.debug("OpenTelemetry not installed: %s", e)
     except Exception as e:
         _log.error("Failed to init tracing: %s", e)
 
