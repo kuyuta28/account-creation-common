@@ -6,7 +6,7 @@ from pathlib import Path
 COMMON_SRC = Path(__file__).resolve().parents[2] / "src" / "common"
 FORBIDDEN_IMPORT_PREFIXES = (
     "aa_proxy",
-    "desktop_ui",
+    "web_ui",
     "mail_service",
     "registrar",
     "tts_proxy",

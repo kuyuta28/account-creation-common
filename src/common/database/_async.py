@@ -1067,3 +1067,28 @@ async def cycle_provider_tag_async(session: AsyncSession, provider_domain: str, 
 
     await session.commit()
     return sorted(next_tags)
+
+
+async def get_provider_connection_strs_async(
+    service_tag: str | None = None,
+) -> tuple[str, ...]:
+    """Trả về tuple connection_str của tất cả mail providers active.
+
+    service_tag: filter theo tag (vd. 'mailslurp' → chỉ providers được tag 'mailslurp').
+                  None = tất cả providers active.
+
+    Connection_str là format identifier mà MailClient.create_mailbox() expect:
+      - mailslurp.com:{api_key}
+      - testmail.app:{server_id}:{api_key}
+      - mailosaur.com:{api_key}:{server_id}
+      - guerrillamail.com
+      - mail.tm:{api_key}@{server_id} hoặc tương tự
+      - gmail.com:{email}:{meta}
+    """
+    from common.database._async import get_mail_providers_async
+    from common.database._engine import get_async_session
+
+    async with get_async_session() as session:
+        rows = await get_mail_providers_async(session, service_tag=service_tag)
+    return tuple(r["connection_str"] for r in rows)
+
