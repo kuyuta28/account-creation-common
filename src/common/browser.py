@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import ctypes
 import math
+import os
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 from typing import Protocol, runtime_checkable
@@ -58,10 +59,27 @@ _NO_THROTTLE_PREFS = {
     "toolkit.cosmeticAnimations.enabled": True,
 }
 
+def _resolve_headless(cfg: BrowserConfig, override: bool | None) -> bool:
+    """Headless can be forced via env (container default) or caller override.
+
+    Priority: explicit caller override > CAMOUFOX_HEADLESS env > cfg.headless.
+    The env var lets docker-compose force headless=1 in the container without
+    each service having its own override path.
+    """
+    if override is not None:
+        return override
+    env = os.getenv("CAMOUFOX_HEADLESS", "").lower()
+    if env in ("1", "true", "yes", "on"):
+        return True
+    if env in ("0", "false", "no", "off"):
+        return False
+    return cfg.headless
+
+
 @asynccontextmanager
 async def open_browser(cfg: BrowserConfig, headless: bool | None = None) -> AsyncIterator:
     """Context manager duy nhất mở camoufox. Mọi registrar đều dùng cái này."""
-    _headless = cfg.headless if headless is None else headless
+    _headless = _resolve_headless(cfg, headless)
     kwargs: dict = {
         "headless": _headless,
         "os": "windows",
