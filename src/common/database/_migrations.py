@@ -86,7 +86,6 @@ def _migrate_mailboxes_to_accounts(engine) -> None:
 
 def _normalize_provider_type(provider_domain: str, compound_key: str) -> str:
     short_map = {
-        "mailslurp":        "mailslurp.com",
         "testmail":         "testmail.app",
         "mailtm":           "mail.tm",
         "mail.tm":          "mail.tm",
@@ -97,8 +96,6 @@ def _normalize_provider_type(provider_domain: str, compound_key: str) -> str:
     }
     if provider_domain in short_map:
         return short_map[provider_domain]
-    if compound_key.startswith("mailslurp.com:"):
-        return "mailslurp.com"
     if compound_key.startswith("testmail.app:"):
         return "testmail.app"
     if compound_key.startswith("mailosaur.com:"):
@@ -112,8 +109,6 @@ def _normalize_provider_type(provider_domain: str, compound_key: str) -> str:
 
 def _split_compound_key(provider_type: str, compound_key: str) -> tuple[str, str]:
     match provider_type:
-        case "mailslurp.com":
-            return compound_key.removeprefix("mailslurp.com:"), ""
         case "testmail.app":
             rest = compound_key.removeprefix("testmail.app:")
             ns, _, key = rest.partition(":")

@@ -19,6 +19,8 @@ from sqlalchemy import case, func, select, update, delete
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ._mailboxes import _UNSET
+
 if TYPE_CHECKING:
     from common.src.common.database._engine import _Account, _MailProvider
 
@@ -37,7 +39,7 @@ async def insert_account_async(
     """Insert account + extension in a single transaction."""
     from common.database._engine import _Account, _AccountGmail, _AccountAA
     from common.database._engine import _AccountOpenRouter, _AccountElevenLabs
-    from common.database._engine import _AccountOllama, _AccountTestmail, _AccountMailosaur
+    from common.database._engine import _AccountOllama, _AccountTestmail, _AccountMailosaur, _AccountCloudflare
 
     # Check if account already exists
     existing = await session.execute(
@@ -107,6 +109,12 @@ async def insert_account_async(
             api_key=ext_data.get("api_key", ""),
             server_id=ext_data.get("server_id", ""),
         )
+    elif svc == "CLOUDFLARE" and ext_data:
+        ext_row = _AccountCloudflare(
+            account_id=base.id,
+            api_key=ext_data.get("api_key", ""),
+            account_id_in_token=ext_data.get("account_id_in_token", ""),
+        )
 
     if ext_row is not None:
         session.add(ext_row)
@@ -123,7 +131,7 @@ async def get_account_by_email_async(
     """Async version of get_account_by_email."""
     from common.database._engine import _Account, _AccountGmail, _AccountAA
     from common.database._engine import _AccountOpenRouter, _AccountElevenLabs
-    from common.database._engine import _AccountOllama, _AccountTestmail, _AccountMailosaur
+    from common.database._engine import _AccountOllama, _AccountTestmail, _AccountMailosaur, _AccountCloudflare
     from common.database._engine import _EXTENSION_MODELS
 
     result = await session.execute(
@@ -156,7 +164,7 @@ async def update_account_async(
     """Async version of update_account - updates base + extension fields."""
     from common.database._engine import _Account, _AccountGmail, _AccountAA
     from common.database._engine import _AccountOpenRouter, _AccountElevenLabs
-    from common.database._engine import _AccountOllama, _AccountTestmail, _AccountMailosaur
+    from common.database._engine import _AccountOllama, _AccountTestmail, _AccountMailosaur, _AccountCloudflare
     from common.database._engine import _EXT_UPDATABLE, _EXT_FIELD_ALIAS, _EXTENSION_MODELS
 
     # Find account
@@ -639,13 +647,24 @@ async def get_mailbox_record_async(session: AsyncSession, email: str) -> dict[st
 async def upsert_mailbox_record_async(
     session: AsyncSession,
     email: str,
-    app_password: str = "",
-    totp_secret: str = "",
-    password: str = "",
-    source_email: str = "",
-    label: str = "",
-    disabled: bool = False,
+    app_password: Any = _UNSET,
+    totp_secret: Any = _UNSET,
+    password: Any = _UNSET,
+    source_email: Any = _UNSET,
+    label: Any = _UNSET,
+    disabled: Any = _UNSET,
 ) -> dict[str, Any]:
+    """Insert hoặc update Gmail mailbox. Trả về dict mailbox sau khi lưu.
+
+    Contract — mirrors the sync `upsert_mailbox_record` in `_mailboxes.py`:
+      - Each settable param defaults to `_UNSET`, NOT "" or None.
+      - On INSERT: passed fields are written; omitted (`_UNSET`) fields fall
+        back to the column default ("").
+      - On UPDATE: only fields the caller passes (anything `is not _UNSET`)
+        are written; omitted fields are preserved. This prevents a POST/PATCH
+        that omits `totp_secret` from wiping the stored secret to "".
+      - To explicitly CLEAR a field, pass "" (a deliberate write).
+    """
     from common.database._engine import _Account, _AccountGmail, _Service
 
     canonical = email.strip().lower()
@@ -655,37 +674,66 @@ async def upsert_mailbox_record_async(
         .values(name="GMAIL", has_registrar=False)
         .on_conflict_do_nothing(index_elements=["name"])
     )
-    await session.execute(
-        pg_insert(_Account)
-        .values(
-            service="GMAIL",
-            email=canonical,
-            password=password,
-            source_email=source_email,
-            disabled=disabled,
-            session_state="",
-            check_status="",
-            last_checked="",
-            last_error="",
-            created_at=now,
-            updated_at=now,
-        )
-        .on_conflict_do_update(
-            index_elements=["service", "email"],
-            set_={"password": password, "source_email": source_email, "disabled": disabled, "updated_at": now},
-        )
-    )
+
+    existing = (await session.execute(
+        select(_Account).where(_Account.service == "GMAIL", _Account.email == canonical)
+    )).scalar_one_or_none()
+
+    if existing is None:
+        # INSERT: passed values, or column default ("") for omitted fields.
+        insert_values: dict[str, Any] = {
+            "service": "GMAIL",
+            "email": canonical,
+            "session_state": "",
+            "check_status": "",
+            "last_checked": "",
+            "last_error": "",
+            "created_at": now,
+            "updated_at": now,
+        }
+        if password     is not _UNSET: insert_values["password"]     = password
+        if source_email is not _UNSET: insert_values["source_email"] = source_email
+        if disabled     is not _UNSET: insert_values["disabled"]     = disabled
+        await session.execute(pg_insert(_Account).values(**insert_values))
+    else:
+        # UPDATE: only fields the caller actually passes.
+        update_values: dict[str, Any] = {"updated_at": now}
+        if password     is not _UNSET: update_values["password"]     = password
+        if source_email is not _UNSET: update_values["source_email"] = source_email
+        if disabled     is not _UNSET: update_values["disabled"]     = disabled
+        if len(update_values) > 1:
+            await session.execute(
+                update(_Account)
+                .where(_Account.service == "GMAIL", _Account.email == canonical)
+                .values(**update_values)
+            )
+
     row = (await session.execute(
         select(_Account).where(_Account.service == "GMAIL", _Account.email == canonical)
     )).scalar_one()
-    await session.execute(
-        pg_insert(_AccountGmail)
-        .values(account_id=row.id, totp_secret=totp_secret, app_password=app_password, label=label)
-        .on_conflict_do_update(
-            index_elements=["account_id"],
-            set_={"totp_secret": totp_secret, "app_password": app_password, "label": label},
-        )
-    )
+
+    ext_existing = (await session.execute(
+        select(_AccountGmail).where(_AccountGmail.account_id == row.id)
+    )).scalar_one_or_none()
+
+    if ext_existing is None:
+        ext_values: dict[str, Any] = {"account_id": row.id}
+        if app_password is not _UNSET: ext_values["app_password"] = app_password
+        if totp_secret  is not _UNSET: ext_values["totp_secret"]  = totp_secret
+        if label        is not _UNSET: ext_values["label"]        = label
+        await session.execute(pg_insert(_AccountGmail).values(**ext_values))
+    else:
+        ext_update: dict[str, Any] = {}
+        if app_password is not _UNSET: ext_update["app_password"] = app_password
+        if totp_secret  is not _UNSET: ext_update["totp_secret"]  = totp_secret
+        if label        is not _UNSET: ext_update["label"]        = label
+        if ext_update:
+            await session.execute(
+                update(_AccountGmail)
+                .where(_AccountGmail.account_id == row.id)
+                .values(**ext_update)
+            )
+
     await session.commit()
     return await get_mailbox_record_async(session, canonical) or {}
 
@@ -1074,11 +1122,10 @@ async def get_provider_connection_strs_async(
 ) -> tuple[str, ...]:
     """Trả về tuple connection_str của tất cả mail providers active.
 
-    service_tag: filter theo tag (vd. 'mailslurp' → chỉ providers được tag 'mailslurp').
+    service_tag: filter theo tag (vd. 'testmail' → chỉ providers được tag 'testmail').
                   None = tất cả providers active.
 
     Connection_str là format identifier mà MailClient.create_mailbox() expect:
-      - mailslurp.com:{api_key}
       - testmail.app:{server_id}:{api_key}
       - mailosaur.com:{api_key}:{server_id}
       - guerrillamail.com

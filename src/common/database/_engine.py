@@ -1,7 +1,7 @@
-"""
-database/_engine.py — ORM models, engine cache, and row serializers.
+﻿"""
+database/_engine.py â€” ORM models, engine cache, and row serializers.
 
-Internal module — callers use database/__init__.py public API.
+Internal module â€” callers use database/__init__.py public API.
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.pool import NullPool
 
 
-# ── ORM Models ────────────────────────────────────────────────────────────────
+# â”€â”€ ORM Models â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _Base(DeclarativeBase):
     pass
@@ -47,7 +47,7 @@ class _Account(_Base):
     )
 
 
-# ── Extension tables (CTI) ─────────────────────────────────────────────────────
+# â”€â”€ Extension tables (CTI) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _AccountGmail(_Base):
     __tablename__ = "accounts_gmail"
@@ -96,6 +96,13 @@ class _AccountTestmail(_Base):
     api_key:    Mapped[str] = mapped_column(Text, default="")
 
 
+class _AccountCloudflare(_Base):
+    __tablename__ = "accounts_cloudflare"
+    account_id:          Mapped[int]  = mapped_column(Integer, ForeignKey("accounts.id", ondelete="CASCADE"), primary_key=True)
+    api_key:             Mapped[str]  = mapped_column(Text, default="")
+    account_id_in_token: Mapped[str]  = mapped_column(Text, default="")
+
+
 class _AccountMailosaur(_Base):
     __tablename__ = "accounts_mailosaur"
     account_id: Mapped[int] = mapped_column(Integer, ForeignKey("accounts.id", ondelete="CASCADE"), primary_key=True)
@@ -103,7 +110,7 @@ class _AccountMailosaur(_Base):
     server_id:  Mapped[str] = mapped_column(Text, default="")
 
 
-# ── CTI registry ───────────────────────────────────────────────────────────────
+# â”€â”€ CTI registry â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 _EXTENSION_MODELS: dict[str, type] = {
     "GMAIL":              _AccountGmail,
@@ -113,6 +120,7 @@ _EXTENSION_MODELS: dict[str, type] = {
     "OLLAMA":             _AccountOllama,
     "TESTMAIL":           _AccountTestmail,
     "MAILOSAUR":          _AccountMailosaur,
+    "CLOUDFLARE":         _AccountCloudflare,
 }
 
 # Fields that live in the base accounts table
@@ -131,15 +139,16 @@ _EXT_UPDATABLE: dict[str, frozenset[str]] = {
     "OLLAMA":             frozenset({"api_key"}),
     "TESTMAIL":           frozenset({"api_key"}),
     "MAILOSAUR":          frozenset({"api_key", "server_id", "account_id"}),
+    "CLOUDFLARE":         frozenset({"api_key", "account_id_in_token"}),
 }
 
-# Old flat field name → actual extension column name (backward compat)
+# Old flat field name â†’ actual extension column name (backward compat)
 _EXT_FIELD_ALIAS: dict[str, dict[str, str]] = {
     "ARTIFICIALANALYSIS": {"account_id": "org_slug"},
     "MAILOSAUR":          {"account_id": "server_id"},
 }
 
-# Legacy combined set — kept so old callers importing _UPDATABLE don't break
+# Legacy combined set â€” kept so old callers importing _UPDATABLE don't break
 _UPDATABLE: frozenset[str] = _BASE_UPDATABLE | frozenset({
     "api_key", "credits", "quota_pct", "refresh_token", "access_token",
     "id_token", "token_type", "expired", "last_refresh", "account_id",
@@ -202,7 +211,7 @@ class _MailboxServiceBlock(_Base):
     )
 
 
-# ── Async Engine (Phase 2) ───────────────────────────────────────────────────
+# â”€â”€ Async Engine (Phase 2) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 _async_engine = None
 _async_session_factory = None
@@ -242,7 +251,7 @@ def get_async_engine():
     return _async_engine
 
 
-# ── Engine cache ──────────────────────────────────────────────────────────────
+# â”€â”€ Engine cache â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 _engines: dict[str, Engine] = {}
 
@@ -273,7 +282,7 @@ def _get_engine(db_path: Path, pragmas: dict[str, str] | None = None) -> Engine:
     return _engines[key]
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _now() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -353,6 +362,9 @@ def _to_dict(row: _Account, ext=None) -> dict[str, Any]:
     elif svc == "MAILOSAUR":
         d["api_key"]    = ext.api_key
         d["account_id"] = ext.server_id
+    elif svc == "CLOUDFLARE":
+        d["api_key"]    = ext.api_key
+        d["account_id"] = ext.account_id_in_token
     return d
 
 
@@ -373,8 +385,6 @@ def _to_mailbox_dict(row: _Account, ext: "_AccountGmail | None" = None) -> dict[
 
 def _connection_str(provider_type: str, api_key: str, server_id: str) -> str:
     match provider_type:
-        case "mailslurp.com":
-            return f"mailslurp.com:{api_key}"
         case "testmail.app":
             return f"testmail.app:{server_id}:{api_key}"
         case "mailosaur.com":
@@ -419,7 +429,7 @@ _UPDATABLE = frozenset({
 
 
 def _base_values(record) -> dict:
-    """Trả về dict fields cho bảng accounts (base)."""
+    """Tráº£ vá» dict fields cho báº£ng accounts (base)."""
     return {
         "service":       record.service.upper(),
         "email":         record.email,
@@ -433,7 +443,7 @@ def _base_values(record) -> dict:
 
 
 def _ext_values(record) -> dict | None:
-    """Trả về dict fields cho extension table tương ứng, hoặc None nếu không có."""
+    """Tráº£ vá» dict fields cho extension table tÆ°Æ¡ng á»©ng, hoáº·c None náº¿u khÃ´ng cÃ³."""
     svc = record.service.upper()
     match svc:
         case "GMAIL":
@@ -470,10 +480,17 @@ def _ext_values(record) -> dict | None:
                 "api_key":  getattr(record, "api_key", ""),
                 "server_id": getattr(record, "account_id", ""),
             }
+        case "CLOUDFLARE":
+            return {
+                "api_key": getattr(record, "api_key", ""),
+                "account_id_in_token": getattr(record, "account_id", ""),
+            }
         case _:
             return None
 
 
-# Deprecated — kept for backward compat with any direct callers
+# Deprecated â€” kept for backward compat with any direct callers
 def _record_to_values(record) -> dict:
     return _base_values(record)
+
+

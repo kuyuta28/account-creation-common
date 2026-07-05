@@ -188,8 +188,6 @@ def _tag_row_to_dict(row) -> dict[str, Any]:
 
 def _connection_str(provider_type: str, api_key: str, server_id: str) -> str:
     match provider_type:
-        case "mailslurp.com":
-            return f"mailslurp.com:{api_key}"
         case "testmail.app":
             return f"testmail.app:{server_id}:{api_key}"
         case "mailosaur.com":
